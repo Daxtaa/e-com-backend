@@ -7,24 +7,64 @@ const Product=require("./DB/Product");
 const app=express();
 app.use(cors());
 app.use(express.json());
+var bcrypt = require('bcryptjs');
+var jwt = require('jsonwebtoken');
+
+const SECRET = 'umairSecret'
 
 
 app.post("/register", async(req, resp)=>{
-    let user =new User(req.body);
-    let result= await user.save();
-    resp.send(result);
+    const {name,email,password} = req.body;
+    console.log("user data: ",req.body);
+    const user = await User.findOne({email: email});
+    if(user){
+        resp.send({message: "user already exists"});
+    }else{
+        var salt = bcrypt.genSaltSync(10);
+        var hash = bcrypt.hashSync(password, salt);
+        const userData = new User({
+            name: name,
+            email: email,
+            password: hash,
+        });
+        const added = await userData.save();
+        if(added){
+            resp.send({message: 'User registerd successfully',status: 200});
+        }else{
+            resp.send({message: 'User not created!'});
+        }
+    }
 })
 
 app.post("/login", async (req, res)=>{
 
-    if((req.body.email) && (req.body.password))
+    const {email, password} = req.body;
+
+    if((email) && (password))
     {
-        let user =await User.find(req.body);
+        let user = await User.findOne({email: email});
+
         if(user){
-            res.send(user);
+            if(bcrypt.compareSync(password, user.password)){
+                const userData = {
+                    name: user.name,
+                    email: user.email,
+                }
+                var token = jwt.sign(userData,SECRET, {
+                    expiresIn: '1h'
+                });
+                const payload = {
+                    userData,
+                    token
+                }
+                console.log("payload: ",payload);
+                res.send({data: payload,status: 200});
+            }else{
+                res.send({message: 'Invalid password'})
+            }
         }
         else{
-            res.send({result: "Error... "});
+            res.send({message: "Error... "});
         }
     }
     
@@ -53,7 +93,7 @@ app.delete("/delete/:id", async(req, resp)=>{
     resp.send(result);
 });
 
-app.get("/delete/:id", async(req, resp)=>{
+app.get("/get-details/:id", async(req, resp)=>{
     let result = await Product.findOne({_id: req.params.id});
     if(result)
     {
@@ -64,7 +104,7 @@ app.get("/delete/:id", async(req, resp)=>{
     }
 })
 
-app.put("/delete/:id", async(req, resp)=>{
+app.put("/update-product/:id", async(req, resp)=>{
     let result = await Product.updateOne(
            {_id: req.params.id}, {$set: req.body}
 
@@ -72,4 +112,4 @@ app.put("/delete/:id", async(req, resp)=>{
     resp.send(result);
 })
 
-app.listen(5000);
+app.listen(process.env.PORT || 5000);
